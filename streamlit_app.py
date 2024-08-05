@@ -1,59 +1,89 @@
 import streamlit as st
-from DataProcessor.DataLoader import DataLoader
-from DataProcessor.DataEvaluator import DataEvaluator
-from DataProcessor.GraphicGenerator import GraphicGenerator
-from DataProcessor.LogisticRegressor import LogisticRegressor
+import pandas as pd
+from sklearn.model_selection import train_test_split
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.metrics import mean_squared_error, r2_score
+import joblib
 
-# To run the APP: streamlit run streamlit_app.py
-if __name__ == '__main__':
-    st.header('Logistic Regression')
-    st.markdown('*Author: Leonardo Simões*')
+# Load the dataset
+@st.cache
+def load_data():
+    df = pd.read_csv('solarpowergeneration.csv')
+    df.dropna(inplace=True)  # Handle missing values
+    return df
 
-    # Data Loader
-    st.header('Data loader')
-    dataLoader = DataLoader()
-    dataLoader.check_labels()
-    dataLoader.check_separator()
-    file = dataLoader.load_file()
+df = load_data()
 
-    if file is not None:
-        df = dataLoader.load_data(file)
+# Display the dataset
+st.title("Solar Power Generation Data")
+st.write("### Dataset Preview")
+st.dataframe(df.head())
 
-        # Data evaluation
-        st.header('Data evaluation')
-        st.write('Non-numeric columns and rows with missing values have been dropped.')
-        dataEvaluator = DataEvaluator(df)
-        dataEvaluator.show_head()
-        dataEvaluator.show_dimensions()
-        dataEvaluator.show_columns()
+# Display summary statistics
+st.write("### Summary Statistics")
+st.write(df.describe())
 
-        # Graphic Plots
-        st.header('Graphic Plots')
-        plotGenerator = GraphicGenerator(df)
+# Feature selection and target variable
+X = df[['distance-to-solar-noon', 'temperature', 'wind-direction', 'wind-speed', 'sky-cover', 
+        'visibility', 'humidity', 'average-wind-speed-(period)', 'average-pressure-(period)']]
+y = df['power-generated']
 
-        checked_pairplot = st.checkbox('PairPlot')
-        checked_scatterPlot = st.checkbox('ScatterPlot')
-        checked_correlationPlot = st.checkbox('Correlation')
-        checked_logisticRegPlot = st.checkbox('LogisticRegPlot')
+# Split the data
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
-        if checked_pairplot:
-            plotGenerator.pairplot()
-            st.markdown('<hr/>', unsafe_allow_html=True)
+# Train the model
+@st.cache
+def train_model():
+    model = RandomForestRegressor()
+    model.fit(X_train, y_train)
+    return model
 
-        if checked_scatterPlot:
-            plotGenerator.scatterplot()
-            st.markdown('<hr/>', unsafe_allow_html=True)
+model = train_model()
 
-        if checked_correlationPlot:
-            plotGenerator.correlationPlot()
-            st.markdown('<hr/>', unsafe_allow_html=True)
+# Evaluate the model
+y_pred = model.predict(X_test)
+mse = mean_squared_error(y_test, y_pred)
+r2 = r2_score(y_test, y_pred)
 
-        if checked_logisticRegPlot:
-            plotGenerator.logisticRegressionPlot()
-            st.markdown('<hr/>', unsafe_allow_html=True)
+# Display model performance
+st.write("### Model Performance")
+st.write(f"Mean Squared Error (MSE): {mse:.2f}")
+st.write(f"R-Squared (R2): {r2:.2f}")
 
-        # Logistic Regression
-        st.header('Logistic Regression')
-        regressor = LogisticRegressor(df)
-        regressor.logistic()
-        st.markdown('<hr/>', unsafe_allow_html=True)
+# Save the model
+joblib.dump(model, 'solar_power_model.pkl')
+
+# Prediction section
+st.write("### Make Predictions")
+
+# Input fields for prediction
+distance_to_solar_noon = st.number_input("Distance to Solar Noon", value=50.0)
+temperature = st.number_input("Temperature", value=25)
+wind_direction = st.number_input("Wind Direction", value=180)
+wind_speed = st.number_input("Wind Speed", value=5.0)
+sky_cover = st.number_input("Sky Cover", value=0)
+visibility = st.number_input("Visibility", value=10.0)
+humidity = st.number_input("Humidity", value=40)
+average_wind_speed = st.number_input("Average Wind Speed", value=3.0)
+average_pressure = st.number_input("Average Pressure", value=1015.0)
+
+# Prediction button
+if st.button("Predict Power Generated"):
+    input_data = pd.DataFrame({
+        'distance-to-solar-noon': [distance_to_solar_noon],
+        'temperature': [temperature],
+        'wind-direction': [wind_direction],
+        'wind-speed': [wind_speed],
+        'sky-cover': [sky_cover],
+        'visibility': [visibility],
+        'humidity': [humidity],
+        'average-wind-speed-(period)': [average_wind_speed],
+        'average-pressure-(period)': [average_pressure]
+    })
+    prediction = model.predict(input_data)[0]
+    st.write(f"Predicted Power Generated: {prediction:.2f} units")
+
+# Streamlit app settings
+st.set_option('deprecation.showfileUploaderEncoding', False)
+st.title('Solar Power Generation Prediction App')
+st.write("Use the inputs to predict the power generated.")
